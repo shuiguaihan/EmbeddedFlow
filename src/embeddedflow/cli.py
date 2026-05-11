@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -9,14 +11,18 @@ from typing import Any
 from .context import build_context
 from .dag import build_graph, downstream_nodes, topological_levels
 from .evidence import EvidenceEvent, EvidenceStore
+from .executors.agent_task import execute_agent_task
 from .executors.manual import execute_manual
+from .executors.python_plugin import execute_python
 from .executors.shell import execute_shell
 from .config import load_project_config
 from .loaders import load_recipes_for_requirement, load_requirement, load_recipe
 from .models import Graph, Recipe, Requirement
 from .paths import ensure_structure, evidence_path, project_root
 from .render import dump_data
+from .schema import validate_schema
 from .status import current_hashes, evaluate_status, requirement_satisfied
+from .yaml_compat import safe_load
 
 
 class CliError(Exception):
@@ -160,7 +166,27 @@ def _execute_recipe(root: Path, req: Requirement, recipe: Recipe):
         return execute_shell(root, req.id, recipe, config)
     if recipe.type == "manual":
         return execute_manual(root, req.id, recipe)
-    raise CliError(f"unsupported recipe type in v0.1: {recipe.type}")
+    if recipe.type == "agent_task":
+        config = load_project_config(root)
+        return execute_agent_task(root, req.id, recipe, config)
+    if recipe.type == "python":
+        config = load_project_config(root)
+        return execute_python(root, req.id, recipe, config)
+    raise CliError(f"unsupported recipe type: {recipe.type}")
+
+
+def _execute_and_record(
+    root: Path,
+    req: Requirement,
+    graph: Graph,
+    store: EvidenceStore,
+    run_id: str,
+    node: str,
+):
+    recipe = graph.nodes[node]
+    result = _execute_recipe(root, req, recipe)
+    _record_result(root, req, graph, store, run_id, node, result)
+    return result
 
 
 def cmd_satisfy(args: argparse.Namespace) -> int:
@@ -171,6 +197,8 @@ def cmd_satisfy(args: argparse.Namespace) -> int:
             print(f"[{action}]   {node:24} {reason}")
         return 0
     run_id = _make_run_id()
+    if args.jobs and args.jobs > 1:
+        return _satisfy_parallel(args, root, req, graph, store, actions, run_id)
     for action, node, reason in actions:
         if action == "skip":
             print(f"[skip]  {node:24} {reason}")
@@ -180,13 +208,79 @@ def cmd_satisfy(args: argparse.Namespace) -> int:
             continue
         recipe = graph.nodes[node]
         print(f"[run]   {node:24} {reason}")
-        result = _execute_recipe(root, req, recipe)
-        _record_result(root, req, graph, store, run_id, node, result)
+        result = _execute_and_record(root, req, graph, store, run_id, node)
         if result.status != "pass" and not args.continue_on_error:
             print(f"[fail]  {node:24} {result.error or 'failed'}", file=sys.stderr)
             return result.exit_code or 1
         if recipe.review == "required":
             print(f"[wait]  {node:24} review required: ef review {node} {req.id} --accept --rationale <text>")
+    statuses = evaluate_status(root, req, graph, store)
+    if requirement_satisfied(statuses, req):
+        print(f"All evidence up to date. {req.id} is satisfied.")
+    return 0
+
+
+def _satisfy_parallel(
+    args: argparse.Namespace,
+    root: Path,
+    req: Requirement,
+    graph: Graph,
+    store: EvidenceStore,
+    actions: list[tuple[str, str, str]],
+    run_id: str,
+) -> int:
+    action_by_node = {node: (action, reason) for action, node, reason in actions}
+    for level in topological_levels(graph):
+        runnable: list[tuple[str, str]] = []
+        for node in level:
+            action, reason = action_by_node[node]
+            if action == "skip":
+                print(f"[skip]  {node:24} {reason}")
+            elif action == "wait":
+                print(f"[wait]  {node:24} {reason}")
+            else:
+                runnable.append((node, reason))
+        if not runnable:
+            continue
+
+        results: dict[str, Any] = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            futures = {
+                pool.submit(_execute_and_record, root, req, graph, store, run_id, node): node
+                for node, _reason in runnable
+            }
+            failed_node: str | None = None
+            for future in concurrent.futures.as_completed(futures):
+                node = futures[future]
+                result = future.result()
+                results[node] = result
+                if result.status != "pass" and not args.continue_on_error:
+                    failed_node = node
+                    for pending in futures:
+                        if pending is not future:
+                            pending.cancel()
+                    break
+            for future, node in futures.items():
+                if future.cancelled():
+                    continue
+                if node not in results and future.done():
+                    results[node] = future.result()
+
+        for node, reason in runnable:
+            if node not in results:
+                continue
+            recipe = graph.nodes[node]
+            result = results[node]
+            print(f"[run]   {node:24} {reason}")
+            if result.status != "pass" and not args.continue_on_error:
+                print(f"[fail]  {node:24} {result.error or 'failed'}", file=sys.stderr)
+                return result.exit_code or 1
+            if recipe.review == "required":
+                print(f"[wait]  {node:24} review required: ef review {node} {req.id} --accept --rationale <text>")
+        if failed_node is not None and not args.continue_on_error:
+            result = results[failed_node]
+            return result.exit_code or 1
+
     statuses = evaluate_status(root, req, graph, store)
     if requirement_satisfied(statuses, req):
         print(f"All evidence up to date. {req.id} is satisfied.")
@@ -283,6 +377,18 @@ def cmd_evidence_invalidate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evidence_compact(args: argparse.Namespace) -> int:
+    root = project_root()
+    store = EvidenceStore(evidence_path(root))
+    if args.dry_run:
+        original, surviving = store.compact(dry_run=True)
+        print(f"Would compact {original} events to {surviving} ({original - surviving} removed)")
+        return 0
+    original, surviving = store.compact()
+    print(f"Compacted {original} events to {surviving} ({original - surviving} removed)")
+    return 0
+
+
 def cmd_run_list(args: argparse.Namespace) -> int:
     root = project_root()
     store = EvidenceStore(evidence_path(root))
@@ -323,8 +429,30 @@ def cmd_recipe_complete(args: argparse.Namespace) -> int:
     store = EvidenceStore(evidence_path(root))
     source_hash, recipe_hash = current_hashes(root, req, recipe)
     artifact = Path(args.artifact)
-    artifact_text = str(artifact.relative_to(root)) if artifact.is_absolute() and artifact.is_relative_to(root) else str(artifact)
-    event_name = "produced" if args.status == "pass" else "failed"
+    status = args.status
+    artifact_text = _artifact_text(root, artifact)
+    error: str | None = None
+
+    if recipe.type == "agent_task" and status == "pass":
+        schema_name = _agent_task_schema(recipe)
+        if schema_name:
+            try:
+                data = safe_load(artifact.read_text(encoding="utf-8"))
+            except OSError as exc:
+                data = None
+                error = str(exc)
+            if not isinstance(data, dict):
+                error = error or "artifact must be a YAML mapping"
+            else:
+                errors = validate_schema(schema_name, data)
+                if errors:
+                    error = "; ".join(errors)
+            if error:
+                status = "fail"
+        if status == "pass":
+            artifact_text = _copy_recipe_artifact(root, args.req_id, args.recipe_id, artifact)
+
+    event_name = "produced" if status == "pass" else "failed"
     store.append(
         EvidenceEvent(
             event=event_name,
@@ -332,14 +460,44 @@ def cmd_recipe_complete(args: argparse.Namespace) -> int:
             req=args.req_id,
             run=_make_run_id(),
             recipe=args.recipe_id,
-            status=args.status,
+            status=status,
             artifacts=[artifact_text],
             source_hash=source_hash,
             recipe_hash=recipe_hash,
+            error=error,
         )
     )
-    print(f"Recorded {args.status} evidence for {args.recipe_id} {args.req_id}")
+    print(f"Recorded {status} evidence for {args.recipe_id} {args.req_id}")
+    if error:
+        print(f"[fail]  {args.recipe_id:24} {error}", file=sys.stderr)
+        return 1
     return 0
+
+
+def _agent_task_schema(recipe: Recipe) -> str | None:
+    agent_config = recipe.raw.get("agent_task")
+    if not isinstance(agent_config, dict):
+        return None
+    schema_name = agent_config.get("output_schema")
+    return schema_name if isinstance(schema_name, str) and schema_name else None
+
+
+def _copy_recipe_artifact(root: Path, req_id: str, recipe_id: str, artifact: Path) -> str:
+    source = artifact if artifact.is_absolute() else root / artifact
+    artifact_dir = root / ".ef" / "artifacts" / req_id / recipe_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    destination = artifact_dir / source.name
+    if source.resolve() != destination.resolve():
+        shutil.copy2(source, destination)
+    return _artifact_text(root, destination)
+
+
+def _artifact_text(root: Path, artifact: Path) -> str:
+    try:
+        path = artifact if artifact.is_absolute() else root / artifact
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(artifact)
 
 
 def cmd_recipe_list(args: argparse.Namespace) -> int:
@@ -414,6 +572,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--force")
     p.add_argument("--continue-on-error", action="store_true")
+    p.add_argument("--jobs", type=int, default=1)
     p.set_defaults(func=cmd_satisfy)
 
     p = sub.add_parser("review")
@@ -454,6 +613,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("req_id")
     p.add_argument("--reason", default="manual")
     p.set_defaults(func=cmd_evidence_invalidate)
+    p = ev_sub.add_parser("compact")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_evidence_compact)
 
     run = sub.add_parser("run")
     run_sub = run.add_subparsers(dest="run_command", required=True)
@@ -479,7 +641,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("recipe_id")
     p.add_argument("req_id")
     p.add_argument("--artifact", required=True)
-    p.add_argument("--status", choices=["pass", "fail"], required=True)
+    p.add_argument("--status", choices=["pass", "fail"], default="pass")
     p.set_defaults(func=cmd_recipe_complete)
 
     profile = sub.add_parser("profile")

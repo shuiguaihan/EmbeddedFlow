@@ -149,6 +149,92 @@ class CliIntegrationTests(unittest.TestCase):
             invalidated = json.loads(run_ef(root, "evidence", "show", "build", "REQ-1", "--format", "json").stdout)
             self.assertEqual(invalidated["latest"]["event"], "invalidated")
 
+    def test_evidence_compact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_project(root)
+            evidence_path = root / ".ef" / "evidence.jsonl"
+            events = [
+                {"ts": "2026-01-01T00:00:00Z", "event": "produced", "node": "build", "req": "REQ-1", "run": "run-1", "status": "pass"},
+                {"ts": "2026-01-01T00:01:00Z", "event": "reviewed", "node": "build", "req": "REQ-1", "run": "run-1", "review_status": "accepted"},
+                {"ts": "2026-01-01T00:02:00Z", "event": "produced", "node": "build", "req": "REQ-1", "run": "run-2", "status": "pass"},
+                {"ts": "2026-01-01T00:03:00Z", "event": "reviewed", "node": "build", "req": "REQ-1", "run": "run-2", "review_status": "accepted"},
+                {"ts": "2026-01-01T00:04:00Z", "event": "invalidated", "node": "build", "req": "REQ-1", "run": "run-3", "reason": "manual"},
+            ]
+            evidence_path.write_text("\n".join(json.dumps(event) for event in events) + "\n")
+
+            result = run_ef(root, "evidence", "compact").stdout
+            self.assertIn("Compacted 5 events to 3", result)
+            compacted = [json.loads(line) for line in evidence_path.read_text().splitlines() if line.strip()]
+            self.assertEqual([event["run"] for event in compacted], ["run-2", "run-2", "run-3"])
+
+    def test_evidence_compact_dry_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_project(root)
+            evidence_path = root / ".ef" / "evidence.jsonl"
+            original = "\n".join([
+                json.dumps({"ts": "2026-01-01T00:00:00Z", "event": "produced", "node": "build", "req": "REQ-1", "run": "run-1", "status": "pass"}),
+                json.dumps({"ts": "2026-01-01T00:01:00Z", "event": "produced", "node": "build", "req": "REQ-1", "run": "run-2", "status": "pass"}),
+            ]) + "\n"
+            evidence_path.write_text(original)
+
+            result = run_ef(root, "evidence", "compact", "--dry-run").stdout
+            self.assertIn("Would compact 2 events to 1", result)
+            self.assertEqual(evidence_path.read_text(), original)
+
+    def test_recipe_complete_validates_agent_task_artifact_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_ef(root, "init", "--profile", "demo")
+            req_dir = root / ".ef" / "requirements"
+            recipe_dir = root / ".ef" / "recipes"
+            (req_dir / "REQ-A.yaml").write_text(textwrap.dedent("""
+                id: REQ-A
+                title: Agent task requirement
+                evidence:
+                  - test_design
+            """).strip() + "\n")
+            (recipe_dir / "test_design.yaml").write_text(textwrap.dedent("""
+                id: test_design
+                type: agent_task
+                description: Generate test design
+                agent_task:
+                  context_query: "ef context {{req.id}} --need test_design --format json"
+                  instructions: "Write a test design"
+                  output_schema: test_design_v1
+            """).strip() + "\n")
+
+            invalid = root / "invalid.yaml"
+            invalid.write_text("schema: test_design_v1\nrequirement: REQ-A\n")
+            failed = run_ef(root, "recipe", "complete", "test_design", "REQ-A", "--artifact", str(invalid), check=False)
+            self.assertNotEqual(failed.returncode, 0)
+            shown = json.loads(run_ef(root, "evidence", "show", "test_design", "REQ-A", "--format", "json").stdout)
+            self.assertEqual(shown["latest"]["event"], "failed")
+            self.assertIn("missing required key: stimulus", shown["latest"]["error"])
+
+            valid = root / "valid.yaml"
+            valid.write_text(textwrap.dedent("""
+                schema: test_design_v1
+                requirement: REQ-A
+                stimulus:
+                  type: manual
+                observations:
+                  - id: visual
+                    type: visual
+                pass_criteria:
+                  - id: checked
+                    type: manual
+                automation_plan:
+                  automated: []
+                  manual: []
+            """).strip() + "\n")
+            run_ef(root, "recipe", "complete", "test_design", "REQ-A", "--artifact", str(valid))
+            shown = json.loads(run_ef(root, "evidence", "show", "test_design", "REQ-A", "--format", "json").stdout)
+            self.assertEqual(shown["latest"]["event"], "produced")
+            copied = root / ".ef" / "artifacts" / "REQ-A" / "test_design" / "valid.yaml"
+            self.assertTrue(copied.is_file())
+
 
 class AdditionalCliTests(unittest.TestCase):
     def test_profile_list_recipe_list_and_direct_recipe_run(self):
