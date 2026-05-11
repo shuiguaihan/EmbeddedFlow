@@ -1,0 +1,16 @@
+project:
+  id: exm-k
+  name: EXM-K reference project
+  repo_root: .
+  app_root: EXM-K
+default_profile: exm-k
+recipe_defaults:
+  timeout: 300
+  shell: /bin/bash
+policy:
+  source_verification: required
+  evidence_required: true
+  test_design_review: required
+  final_acceptance: required
+vars:
+  display_resolution: 1024x600

@@ -1,0 +1,13 @@
+id: build
+type: shell
+description: Simulated EXM-K build artifact
+depends_on: [test_design]
+watch:
+  - src/**/*.txt
+command: |
+  mkdir -p out
+  cp src/fuel_gauge.txt out/EXM-K
+produces:
+  - artifact: out/EXM-K
+    type: simulated-binary
+    label: binary

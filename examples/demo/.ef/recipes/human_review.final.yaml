@@ -1,0 +1,6 @@
+id: human_review.final
+type: manual
+description: Final human acceptance of the built artifact
+depends_on: [build]
+review: required
+instructions: Review out/app.txt and accept when the artifact matches the requirement.

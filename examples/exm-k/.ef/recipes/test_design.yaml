@@ -1,0 +1,6 @@
+id: test_design
+type: manual
+description: Human-approved test design for fuel gauge verification
+depends_on: []
+review: required
+instructions: Record the CAN stimulus levels, expected UI states, screenshot checks, and log checks before build/deploy evidence is accepted.

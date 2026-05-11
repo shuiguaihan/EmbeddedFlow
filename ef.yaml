@@ -1,0 +1,10 @@
+project:
+  id: EmbeddedFlow
+  name: EmbeddedFlow
+  repo_root: .
+default_profile: demo
+recipe_defaults:
+  timeout: 300
+  shell: /bin/bash
+policy:
+  evidence_required: true

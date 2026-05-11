@@ -1,0 +1,13 @@
+id: build
+type: shell
+description: Build a demo artifact from source text
+depends_on: []
+watch:
+  - src/**/*.txt
+command: |
+  mkdir -p out
+  cat src/app.txt > out/app.txt
+produces:
+  - artifact: out/app.txt
+    type: text
+    label: app

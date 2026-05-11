@@ -1,0 +1,35 @@
+updated_at: "2026-05-07T17:18:08+08:00"
+project: EmbeddedFlow
+current_goal: "v0.1 Evidence-DAG implementation plan completed; ready for review/commit if git is repaired"
+status: "ralph_completed_verified"
+mode_context:
+  last_workflow: "$ralph"
+  outcome: "Implementation plan executed, architect approved, deslop completed, Ralph state cleaned."
+canonical_plan: ".omx/plans/evidence-dag-v0.1-implementation-plan.md"
+context_snapshot: ".omx/context/evidence-dag-v0-1-ralph-completion-20260507T063022Z.md"
+verified_facts:
+  - "v0.1 boundary is local shell + manual gates + simulated EXM-K; SSH/SCP/real board/CANSim/target automation/agent_task/python/--jobs are deferred."
+  - "Tests now cover remote:true rejection/no pass evidence, review rationale gate, EXM-K simulated smoke, and docs overclaim regression."
+  - "README and EN/ZH design docs now mark support/deferred/readiness boundaries and label future target-device examples as roadmap."
+  - "Post-deslop verification passed: 13 tests OK, compileall OK, CLI help OK, demo dry-run OK, EXM-K DAG/dry-run OK, no remote: in EXM-K recipes."
+remaining:
+  - "Optional: repair git metadata if diff, commit, or release tag is needed."
+  - "Optional: plan v0.2 SSH/SCP/real-board/CANSim/target-automation work separately."
+blockers:
+  - "Git metadata is unavailable from this directory; git status/commit/tag were not performed."
+  - "Sandbox is read-only by default; future edits need escalation or writable session."
+must_recheck:
+  - "Before release, rerun the verification commands below in the target environment."
+  - "If docs change, keep deferred target-device examples locally labeled as future/roadmap."
+key_files:
+  - "tests/test_cli_integration.py"
+  - "README.md"
+  - "DESIGN-evidence-dag.md"
+  - "DESIGN-evidence-dag-zh.md"
+  - ".omx/plans/evidence-dag-v0.1-implementation-plan.md"
+key_commands:
+  - "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v"
+  - "PYTHONPYCACHEPREFIX=/tmp/embeddedflow-compileall-cache PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m compileall -q src tests"
+  - "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m embeddedflow.cli --help"
+  - "cd examples/exm-k && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=../../src python3 -m embeddedflow.cli dag REQ-EXM-FUEL-GAUGE-001 --format json"
+legacy_migration_input_used: false

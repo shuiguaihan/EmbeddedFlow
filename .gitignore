@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# EmbeddedFlow runtime state
+.ef/evidence.jsonl
+.ef/artifacts/
+.ef/runs/
+.ef/profiles/*/local.env.yaml
+.ef/profiles/*/local.secrets.env
+**/.ef/evidence.jsonl
+**/.ef/artifacts/
+**/.ef/runs/
+**/.ef/profiles/*/local.env.yaml
+**/.ef/profiles/*/local.secrets.env
+
+# OMX local runtime noise
+.omx/logs/
+.omx/state/
+.omx/metrics.json
+.omx/hud-config.json
+.omx/setup-scope.json
+

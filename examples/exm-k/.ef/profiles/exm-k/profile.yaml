@@ -1,0 +1,6 @@
+id: exm-k
+name: EXM-K simulated profile
+build:
+  artifact_path: out/EXM-K
+deploy:
+  deploy_dir: deployed/

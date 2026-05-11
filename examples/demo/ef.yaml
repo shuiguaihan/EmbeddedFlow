@@ -1,0 +1,9 @@
+project:
+  id: demo
+  name: Demo EmbeddedFlow project
+  repo_root: .
+default_profile: demo
+recipe_defaults:
+  timeout: 30
+policy:
+  evidence_required: true

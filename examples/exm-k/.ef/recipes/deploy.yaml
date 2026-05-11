@@ -1,0 +1,11 @@
+id: deploy
+type: shell
+description: Simulated EXM-K deployment
+depends_on: [build]
+command: |
+  mkdir -p deployed
+  cp out/EXM-K deployed/EXM-K
+produces:
+  - artifact: deployed/EXM-K
+    type: deployed-artifact
+    label: deployed

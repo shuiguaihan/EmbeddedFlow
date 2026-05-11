@@ -1,0 +1,14 @@
+id: REQ-EXM-FUEL-GAUGE-001
+title: Fuel gauge UI responds to CAN fuel level signal changes
+source: EXM-K/TODO.md#fuel-gauge
+scope: simulated EXM-K board verification
+watch:
+  - src/**/*.txt
+evidence:
+  - test_design
+  - build
+  - deploy
+  - human_review.final
+tags:
+  - board-verify
+  - fuel-gauge

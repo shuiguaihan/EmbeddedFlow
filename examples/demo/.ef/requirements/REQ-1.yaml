@@ -1,0 +1,7 @@
+id: REQ-1
+title: Demo build and review requirement
+evidence:
+  - build
+  - human_review.final
+watch:
+  - src/**/*.txt

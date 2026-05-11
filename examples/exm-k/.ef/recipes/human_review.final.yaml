@@ -1,0 +1,6 @@
+id: human_review.final
+type: manual
+description: Final acceptance of all simulated EXM-K evidence
+depends_on: [deploy]
+review: required
+instructions: Review test_design, build, and deploy evidence before final acceptance.
