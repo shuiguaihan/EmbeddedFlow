@@ -375,7 +375,7 @@ class AdditionalCliTests(unittest.TestCase):
 
 
 class DocumentationBoundaryTests(unittest.TestCase):
-    def test_design_docs_do_not_present_deferred_target_flow_as_v0_1_example(self):
+    def test_design_docs_do_not_present_deferred_target_flow_as_v0_3_acceptance(self):
         docs = "\n".join([
             (REPO_ROOT / "DESIGN-evidence-dag.md").read_text(encoding="utf-8"),
             (REPO_ROOT / "DESIGN-evidence-dag-zh.md").read_text(encoding="utf-8"),
@@ -397,16 +397,15 @@ class DocumentationBoundaryTests(unittest.TestCase):
         ]
         for phrase in forbidden_current_examples:
             self.assertNotIn(phrase, docs)
-        self.assertIn("v0.1 is a local shell + manual Evidence-DAG MVP", docs)
-        self.assertIn("v0.1 是本地 shell + manual 的 Evidence-DAG MVP", docs)
-        self.assertIn("not v0.1 CLI output", docs)
-        self.assertIn("不是 v0.1 CLI 输出", docs)
-        self.assertIn("Future Multi-Step Deploy (SSH/SCP, Deferred)", docs)
-        self.assertIn("未来多步骤部署（SSH/SCP，延后）", docs)
-        self.assertIn("future full target-device layout", docs)
-        self.assertIn("未来完整目标设备布局", docs)
-        self.assertIn("production-board profile shape is deferred roadmap material", docs)
-        self.assertIn("生产板 Profile 形态是延后的路线图材料", docs)
+        self.assertIn("v0.3.0 is an Evidence-DAG workflow prototype release", docs)
+        self.assertIn("not a real target-device automation release", docs)
+        self.assertIn("Remote shell execution is supported in v0.3.0", docs)
+        self.assertIn("Multi-step shell recipes and SCP steps are supported in v0.3.0", docs)
+        self.assertIn("not v0.3.0 release acceptance examples", docs)
+        self.assertIn("production-board profile shape is retained as real-target roadmap material", docs)
+        self.assertIn("v0.3.0 Release 状态边界", docs)
+        self.assertIn("真实 EXM-K target smoke", docs)
+        self.assertIn("多步骤 shell recipe 和 SCP step", docs)
 
 
 if __name__ == "__main__":

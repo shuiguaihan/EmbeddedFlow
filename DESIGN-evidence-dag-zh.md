@@ -1,5 +1,35 @@
 # EmbeddedFlow 证据-DAG 架构设计
 
+## 0. v0.3.0 Release 状态边界
+
+本节用于 v0.3.0 release 收口；如果下方历史正文仍出现 v0.1/v0.2 路线图式表述，并且与本节或 `README.md` 的 v0.3 support matrix 冲突，以本节和 `README.md` 为准。
+
+v0.3.0 的定位是 Evidence-DAG workflow prototype：它证明 CLI 工作流核心、证据有效性模型、本地/远程 shell 执行、外部 Agent 协作协议、Python 插件扩展点、并行执行、证据压缩和运行历史已经可用。
+
+v0.3.0 已支持：
+
+- Requirement 声明证据，Recipe 生产证据，`.ef/evidence.jsonl` 记录 append-only evidence events。
+- `ef status`、`ef dag`、`ef satisfy`、`ef review`、`ef context`。
+- 本地 shell、SSH remote shell、SCP artifact transfer、多步骤 shell recipe。
+- manual review gate，并要求 accept 时提供 rationale。
+- `agent_task`：准备 instructions/context，由外部 AI agent 回填 artifact，再通过 `ef recipe complete` 完成。
+- `python` recipe：从 `.ef/plugins/<plugin>.py` 加载项目本地插件。
+- `ef satisfy --jobs N` 并行执行同一 DAG level 内的独立节点。
+- `test_design_v1` schema 校验。
+- `ef evidence compact` 证据压缩。
+- `ef run list` / `ef run show` 运行历史。
+- `examples/demo` 和 `examples/exm-k` 参考样例，其中 `examples/exm-k` 仍是模拟本地 shell/manual smoke，不是真板闭环。
+
+v0.3.0 明确延期：
+
+- 真实 EXM-K target smoke。
+- 真实 VM / 板卡凭据接入。
+- CANSim service 集成。
+- ZMQ bridge / target automation。
+- 目标设备截图、日志自动化闭环。
+
+---
+
 ## 1. 产品定义
 
 EmbeddedFlow 是一个项目本地的、AI Agent 优先的嵌入式产品软件工作流 CLI 工具，面向 Linux 嵌入式产品软件。它通过**证据-DAG**（有向无环图）执行模型，将真实需求转化为可追溯的目标设备证据。
@@ -12,41 +42,44 @@ EmbeddedFlow 不是 Codex 专属工作流。Codex、Claude Code、Gemini CLI、O
 
 ---
 
-## 2. v0.1 范围
+## 2. v0.3 Release 范围
 
-v0.1 聚焦于 Linux 嵌入式产品软件。
+v0.3.0 面向 Linux 嵌入式产品软件工作流，是 Evidence-DAG workflow prototype release。
 
-### v0.1 真实边界
+### v0.3 真实边界
 
-本节取代本文其余位置当前设计中的过度承诺：v0.1 是本地 shell + manual 的 Evidence-DAG MVP，并提供模拟 EXM-K 参考。SSH 远程执行、SCP 远程产物拉取、真实 EXM-K 板/VM smoke、CANSim、target automation、`agent_task`、`python` Recipe 和 `--jobs` 都是面向未来的路线图项，不是 v0.1 就绪标准。Git status、commit 和 tag 不是产品就绪标准。
+本节取代下方历史正文中的 v0.1/v0.2 过期表述：v0.3.0 证明工作流 CLI 内核和证据协议已经成立，但它不是“真实目标板自动化闭环”release。
 
-范围内：
+v0.3.0 范围内：
 
-- 项目本地工作流状态，采用只追加事件日志
-- 证据-DAG 执行模型，支持增量重执行
-- 需求接入与声明式证据约束
-- Recipe 系统（v0.1 支持 shell 和 manual 两种类型）
-- DAG 构建、拓扑排序、有效性检查
-- 基于内容哈希的证据失效，支持传递性级联
-- 拉取式（pull-based）AI 上下文 API（`ef context`）
-- 测试设计和最终验收的人工审批门禁
-- 监视文件的源码哈希计算
-- 基于 Profile 的目标配置与模板变量展开
-- 模拟 EXM-K 风格项目集成作为第一个参考 smoke
+- 项目本地工作流状态，采用 append-only evidence event log。
+- Evidence-DAG 执行模型，支持增量重执行。
+- Requirement 声明式证据约束。
+- 源文件 hash 与 recipe hash 有效性判断，并支持依赖级联失效。
+- `ef status`、`ef dag`、`ef satisfy`、`ef review`、`ef context`。
+- 本地 shell recipe 与 SSH remote shell recipe。
+- SCP artifact transfer 与多步骤 shell recipe。
+- manual review gate，并要求 accept rationale。
+- `agent_task` recipe：准备 instructions/context，由外部 agent 通过 `ef recipe complete` 回填产物。
+- `python` plugin recipe：从 `.ef/plugins/<plugin>.py` 加载项目本地插件。
+- `ef satisfy --jobs N` 并行执行同一 DAG level 内的独立节点。
+- `test_design_v1` schema 校验。
+- `ef evidence compact`。
+- `ef run list` / `ef run show`。
+- 模拟 EXM-K 参考样例，作为本地 shell/manual smoke。
 
-范围外（v0.1 不做）：
+v0.3.0 范围外 / 延期：
 
-- RTOS、MCU、裸机、HIL、JTAG、烧录、上电循环等抽象
-- `cansim` Recipe 类型（内置 CANSimService HTTP 执行器）
-- `target_automation` Recipe 类型（内置 ZMQ 桥接）
-- `agent_task` Recipe 类型（结构化 AI 提示/响应协议）
-- `python` Recipe 类型（插件式 Recipe）
-- 并行执行（`--jobs N`）
-- 知识库提供者集成
-- 全局托管工作流服务
-- 自动知识库生成和维护
-- CANSimService 安装或守护进程生命周期管理
-- 默认生成大型流程文档
+- RTOS、MCU、裸机、HIL、JTAG、烧录、上下电循环等抽象。
+- 真实 EXM-K target smoke。
+- 真实 VM / 板卡凭据接入。
+- `cansim` recipe 与 CANSimService 生命周期管理。
+- `target_automation` recipe 与 ZMQ bridge。
+- 目标设备截图、日志自动化闭环。
+- 知识库 provider 集成。
+- 全局托管工作流服务。
+- 自动知识库生成和维护。
+- 默认生成大型流程文档。
 
 ---
 
@@ -65,7 +98,7 @@ v0.1 聚焦于 Linux 嵌入式产品软件。
 - **源码验证必需**：知识库和先前结论永远不能替代源码检查。
 - **最小数据模型**：三个核心概念（需求、Recipe、证据）取代复杂的对象层次。
 - **测试设计是硬依赖**：验证节点在测试设计被生成且审批通过之前不能执行。
-- **Linux 嵌入式优先**：v0.1 先做好 Linux 嵌入式产品交付，再扩展到其他平台。
+- **Linux 嵌入式优先**：v0.3 继续以 Linux 嵌入式产品交付作为第一个产品上下文，再扩展到其他平台。
 
 ---
 
@@ -91,10 +124,10 @@ EmbeddedFlow CLI 核心
         +--> Recipe 执行器
         |      +--> Shell 执行器（本地 subprocess；远程 SSH 延后）
         |      +--> Manual 执行器（人工门禁，阻塞等待审批）
-        |      +--> Cansim 执行器（v0.2：CANSimService HTTP 客户端）
-        |      +--> TargetAutomation 执行器（v0.2：ZMQ 桥接）
-        |      +--> AgentTask 执行器（v0.2：结构化 AI 提示/响应）
-        |      +--> Python 插件执行器（v0.2：importlib 动态加载）
+        |      +--> Cansim 执行器（v0.3 后延期：CANSimService HTTP 客户端）
+        |      +--> TargetAutomation 执行器（v0.3 后延期：ZMQ 桥接）
+        |      +--> AgentTask 执行器（v0.3：外部 Agent 协作协议）
+        |      +--> Python 插件执行器（v0.3：importlib 动态加载）
         |
         +--> 证据存储（只追加 JSONL 事件日志）
         |
@@ -106,7 +139,7 @@ EmbeddedFlow CLI 核心
         |
         +--> 源码哈希器（监视文件内容的 SHA-256）
         |
-        +--> 知识库提供者（v0.2：可选，card_kb / markdown_index / none）
+        +--> 知识库提供者（v0.3 后延期：可选，card_kb / markdown_index / none）
 ```
 
 CLI 核心负责 DAG 构建、有效性检查、执行规划、证据记录和上下文生成。
@@ -135,7 +168,7 @@ EmbeddedFlow 仅有三个核心概念。其他一切都是派生的。
 
 需求声明**完成一项工作需要什么证据**。它不描述如何产出这些证据。
 
-下面的 YAML 是未来目标设备 EXM-K 形态，不是模拟 v0.1 基线。v0.1 已检入的参考在 `examples/exm-k`，节点为 `test_design -> build -> deploy -> human_review.final`，且没有 `remote: true`。
+下面的 YAML 是未来目标设备 EXM-K 形态。已检入的 `examples/exm-k` 参考仍是模拟本地 shell/manual smoke，不是真板流程。
 
 ```yaml
 # .ef/requirements/REQ-EXM-FUEL-GAUGE-001.yaml
@@ -171,7 +204,7 @@ tags:
 
 Recipe 声明**如何产出**一个特定的证据节点。它指定对其他证据节点的依赖、执行方式和产出物。
 
-下面的远程 build Recipe 是路线图设计。v0.1 使用本地 shell Recipe；`remote: true` 会被拒绝。
+下面的远程 build Recipe 使用 v0.3.0 已支持的 SSH shell 形态。真实 EXM-K VM 凭据和板端执行仍不属于 v0.3.0 自动化就绪要求。
 
 ```yaml
 # .ef/recipes/build.yaml
@@ -233,7 +266,7 @@ timeout: 300
 4. **解析传递闭包**：如果 Recipe A 依赖 B，B 依赖 C，则即使需求未显式列出 C 也要包含
 5. **验证图**：检查环（错误）、缺失 Recipe（错误）、孤立节点（警告）
 
-示例：v0.1 模拟 `REQ-EXM-FUEL-GAUGE-001` 参考产生如下本地/manual DAG：
+示例：模拟 `REQ-EXM-FUEL-GAUGE-001` 参考产生如下本地/manual DAG：
 
 ```text
 ┌──────────────┐
@@ -258,7 +291,7 @@ timeout: 300
 - deploy 依赖：[build]
 - human_review.final 依赖：[deploy]
 
-未来目标设备 DAG 可以在 v0.2+ 的 CANSim 和 target automation 落地后加入 `verify.can_stimulus`、`verify.screenshot`、`verify.comparison` 和 `verify.log`。
+未来目标设备 DAG 可以在 v0.3 后的 CANSim 和 target automation 落地后加入 `verify.can_stimulus`、`verify.screenshot`、`verify.comparison` 和 `verify.log`。
 
 ### 6.2 拓扑排序与并行检测
 
@@ -375,14 +408,14 @@ ef satisfy REQ-EXM-FUEL-GAUGE-001 --force build
 
 ### 7.1 Recipe 类型
 
-| 类型 | 执行器 | v0.1 | 描述 |
-|------|--------|------|------|
-| `shell` | 本地 subprocess | 是 | 运行本地 shell 命令；v0.1 会拒绝 `remote: true` |
-| `manual` | 阻塞，等待 `ef review` | 是 | 人工门禁 |
-| `cansim` | 内置 HTTP 客户端 | v0.2 | CANSimService 激励注入 |
-| `target_automation` | 内置 ZMQ 客户端 | v0.2 | 板端 UI 自动化 |
-| `agent_task` | 结构化标准输出协议 | v0.2 | AI Agent 生成证据 |
-| `python` | importlib 动态加载 | v0.2 | 通过 Python 插件实现复杂逻辑 |
+| 类型 | 执行器 | v0.3 状态 | 描述 |
+|------|--------|-----------|------|
+| `shell` | 本地 subprocess 或 SSH remote | Supported | 支持本地命令，也支持 `remote: true` 通过 OpenSSH 执行。 |
+| `manual` | 阻塞，等待 `ef review` | Supported | 人工门禁，accept 时要求 rationale。 |
+| `agent_task` | 外部 Agent 协作协议 | Supported | 准备 instructions/context，外部 agent 通过 `ef recipe complete` 回填产物。 |
+| `python` | importlib 动态加载 | Supported | 通过项目本地 Python 插件实现复杂逻辑。 |
+| `cansim` | HTTP client | Deferred | CANSimService 激励注入仍延期。 |
+| `target_automation` | ZMQ client | Deferred | 板端 UI 自动化仍延期。 |
 
 ### 7.2 Shell Recipe — 本地执行
 
@@ -407,9 +440,9 @@ produces:
     capture: stdout+stderr
 ```
 
-### 7.3 Shell Recipe — 未来远程执行（SSH，延后）
+### 7.3 Shell Recipe - 远程执行（SSH）
 
-以下远程 Recipe 形态仅作为路线图设计保留。v0.1 中 `remote: true` 会非零退出，错误包含 `remote shell recipes are not implemented in this v0.1 slice`，且不得记录通过证据。
+v0.3.0 已支持远程 shell 执行：`remote: true` 会通过 OpenSSH 使用 `.ef/profiles/<profile>/local.env.yaml` 中选定 target；`copy_to_local: true` artifact 会通过 `scp` 拉回本地。
 
 ```yaml
 id: build
@@ -454,9 +487,9 @@ on_failure:
   capture: [stdout, stderr, make_error_log]
 ```
 
-### 7.4 Shell Recipe — 未来多步骤部署（SSH/SCP，延后）
+### 7.4 Shell Recipe - 多步骤部署（SSH/SCP）
 
-该板端部署 Recipe 仅作为路线图设计保留。它依赖 SSH 远程执行和 SCP 产物传输，两者均不属于 v0.1；v0.1 模拟 EXM-K 参考使用本地 shell copy 命令。
+v0.3.0 已支持多步骤 shell recipe 和 SCP step。下面的示例展示目标板形态，但 `examples/exm-k` 仍是模拟本地 shell/manual smoke，不是真板流程。
 
 ```yaml
 id: deploy
@@ -509,7 +542,7 @@ produces:
       startup_time_seconds: float
 ```
 
-### 7.5 CANSim Recipe（v0.2）
+### 7.5 CANSim Recipe（v0.3 后延期）
 
 ```yaml
 id: verify.can_stimulus
@@ -567,7 +600,7 @@ produces:
     contains: all_request_response_pairs
 ```
 
-### 7.6 目标自动化 Recipe（v0.2）
+### 7.6 目标自动化 Recipe（v0.3 后延期）
 
 ```yaml
 id: verify.screenshot
@@ -617,7 +650,7 @@ produces:
       errors: list
 ```
 
-### 7.7 Agent Task Recipe（v0.2）
+### 7.7 Agent Task Recipe（v0.3 已支持）
 
 ```yaml
 id: test_design
@@ -892,7 +925,7 @@ ef satisfy <req-id> [--dry-run] [--force <node>] [--continue-on-error]
     --force <node>：强制重新执行指定节点。
     --continue-on-error：首次失败不停止。
 
-v0.1 后延后：`--profile <id>` 执行选择和 `--jobs N` 并行执行。
+v0.3.0 已支持 `--jobs N`，可并行执行同一 DAG level 内的独立节点；额外 profile 切换体验仍可后续增强。
 
 # 状态与检查
 ef status [<req-id>] [--all]
@@ -956,7 +989,7 @@ ef run show <run-id>
 
 ### 9.2 使用示例会话
 
-这个 v0.1 示例使用已检入的模拟 EXM-K 参考。它只依赖本地执行：不需要 `--profile`、SSH、VM、真实板端、CANSim、target automation 或 `agent_task`。
+这个示例使用已检入的模拟 EXM-K 参考。它只依赖本地执行：不需要 SSH、VM、真实板端、CANSim、target automation 或外部 agent 执行。
 
 ```bash
 # 查看模拟需求的 DAG
@@ -1005,7 +1038,7 @@ $ ef status REQ-EXM-FUEL-GAUGE-001 --format json
 }
 ```
 
-包含 VM 构建、板端部署、CANSim、target automation、截图和板端日志的真实目标示例属于 v0.2+ 路线图章节，不是 v0.1 验收示例。
+包含 VM 构建、板端部署、CANSim、target automation、截图和板端日志的真实目标示例属于 v0.3 后的路线图章节，不是 v0.3.0 release 验收示例。
 
 ---
 
@@ -1028,7 +1061,7 @@ $ ef status REQ-EXM-FUEL-GAUGE-001 --format json
 $ ef context REQ-EXM-FUEL-GAUGE-001 --format json
 ```
 
-返回当前本地项目数据。v0.1 的 context 输出格式是 JSON 或 Markdown，模拟 EXM-K 参考只包含四个本地/manual 节点：
+返回当前本地项目数据。context 输出格式是 JSON 或 Markdown，模拟 EXM-K 参考只包含四个本地/manual 节点：
 
 ```json
 {
@@ -1063,7 +1096,7 @@ $ ef context REQ-EXM-FUEL-GAUGE-001 --format json
 }
 ```
 
-v0.1 的 context 输出不包含 SSH 凭据、板端 host、CANSim endpoint、板端部署路径或 target automation channel。
+模拟 EXM-K 的 context 输出不包含 SSH 凭据、板端 host、CANSim endpoint、板端部署路径或 target automation channel。
 
 ### 10.3 范围化上下文查询
 
@@ -1102,11 +1135,11 @@ $ ef context REQ-EXM-FUEL-GAUGE-001 --need build --format json
 }
 ```
 
-未来如果出现包含 `type: cansim`、CANSim host/port、board host 或目标部署路径的 `verify.can_stimulus` 范围化上下文，那属于 v0.2+ 路线图行为，不是 v0.1 CLI 输出。
+未来如果出现包含 `type: cansim`、CANSim host/port、board host 或目标部署路径的 `verify.can_stimulus` 范围化上下文，那属于 v0.3 后路线图行为，不是 v0.3.0 release 验收输出。
 
 ### 10.4 Agent 工作流模式
 
-v0.1 的本地/manual 交互模式是：
+v0.3.0 的本地/manual/agent_task 交互模式是：
 
 ```text
 1. Agent 收到任务："满足 REQ-EXM-FUEL-GAUGE-001"
@@ -1118,17 +1151,17 @@ v0.1 的本地/manual 交互模式是：
 7. Agent 调用：ef status REQ-EXM-FUEL-GAUGE-001 --format json
 ```
 
-未来由 agent task 生成测试设计、CANSim 注入激励、target automation 捕获截图、板端日志成为证据的工作流属于 v0.2+ 路线图行为。
+agent_task 生成测试设计已在 v0.3.0 支持；CANSim 注入激励、target automation 捕获截图、板端日志成为证据的工作流属于 v0.3 后路线图行为。
 
 ---
 
 ## 11. 测试设计证据结构
 
-该 schema 是未来目标设备测试设计产物形态。v0.1 中，`test_design` 是模拟 EXM-K 参考里的 manual review gate；自动 `agent_task` 产出和 CANSim 驱动的目标设备验证均已延后。
+该 schema 是 v0.3.0 已支持的 `test_design_v1` artifact 形态，可由 `agent_task` 产出并在 `ef recipe complete` 时校验；CANSim 驱动的目标设备验证仍延期。
 
 ### 11.1 Schema：test_design_v1
 
-测试设计是结构化 YAML 文档，可在 v0.1 作为 manual 证据附件，也可在未来由 `agent_task` Recipe 生成。它定义在目标设备集成存在时如何验证需求。
+测试设计是结构化 YAML 文档，可作为 manual 证据附件，也可由 `agent_task` Recipe 生成。它定义在目标设备集成存在时如何验证需求。
 
 ```yaml
 schema: test_design_v1
@@ -1300,7 +1333,7 @@ risks:
 
 ## 12. 项目布局
 
-下面的项目布局是未来完整目标设备布局。它包含 CANSim、target automation、Python 插件、运行元数据和真实板端产物，这些均已从 v0.1 延后。v0.1 已检入参考是更小的 `examples/exm-k` 本地/manual 布局。
+下面的项目布局是未来完整目标设备布局。v0.3.0 已支持 Python 插件和运行元数据；CANSim、target automation 和真实板端产物仍延期。已检入参考是更小的 `examples/exm-k` 本地/manual 布局。
 
 ### 12.1 目录结构
 
@@ -1399,7 +1432,7 @@ vars:
 
 ### 12.4 Profile 配置
 
-该生产板 Profile 形态是延后的路线图材料。v0.1 不解析 VM、板端、CANSim、SSH 或 SCP 目标。
+该生产板 Profile 形态作为真实目标板路线图材料保留。v0.3.0 原则上支持 SSH/SCP target，但真实 EXM-K VM 或板卡凭据不属于本次 release 要求。
 
 ```yaml
 # .ef/profiles/exm-k/profile.yaml
@@ -1441,7 +1474,7 @@ targets:
 
 ### 12.5 本地环境（gitignore）
 
-该真实目标本地环境文件是未来 SSH/板端集成的延后路线图材料，v0.1 不需要。
+该真实目标本地环境文件用于存放 SSH/SCP target 值。真实 VM、板卡和 CANSim 值不属于 v0.3.0 release 要求，也不得提交。
 
 ```yaml
 # .ef/profiles/exm-k/local.env.yaml
@@ -1475,7 +1508,7 @@ build_env:
 
 ```text
 Recipe: verify.can_stimulus（type: cansim）
-  → CansimExecutor（内置，v0.2）
+  → CansimExecutor（v0.3 后延期）
     → HTTP 客户端
       → CANSimService 端点（WSL 或远程）
         → CAN 硬件接口
@@ -1541,7 +1574,7 @@ test_design.yaml → stimulus.sequences[*].source → cansim_sequences/*.json �
 
 ```text
 Recipe: verify.screenshot（type: target_automation）
-  → TargetAutomationExecutor（内置，v0.2）
+  → TargetAutomationExecutor（v0.3 后延期）
     → SSH 隧道到板端
       → ZMQ PUB/SUB 套接字
         → 板端 ZMQBroker
@@ -1699,7 +1732,7 @@ Level 2：结构化知识提供者
 
 ---
 
-## 18. v0.1 交付物
+## 18. v0.3.0 Release 交付物
 
 ### 18.1 最小可行功能集
 
@@ -1727,27 +1760,30 @@ Level 2：结构化知识提供者
 | 20 | `ef review` | 人工审批记录 |
 | 21 | EXM-K Profile | 模拟本地参考 Profile + build/deploy Recipe |
 
-### 18.2 v0.2 新增
+### 18.2 v0.3.0 已实现
 
-- `cansim` Recipe 类型（内置 CANSimService HTTP 执行器）
-- `target_automation` Recipe 类型（内置 ZMQ 桥接）
-- `agent_task` Recipe 类型（结构化 Agent 协议）
-- `python` Recipe 类型（插件式 Recipe）
-- 并行执行（`--jobs N`）
-- 知识库提供者集成（`card_kb`）
-- 测试设计 schema 验证
-- `ef run list/show` — 运行历史
-- `ef recipe run` — 直接单 Recipe 执行
+- SSH remote shell recipe。
+- SCP artifact retrieval 和 `type: scp` recipe step。
+- 多步骤 shell recipe。
+- `agent_task` recipe 类型（外部 Agent 协作协议）。
+- `python` recipe 类型（插件式 recipe）。
+- 并行执行（`--jobs N`）。
+- 测试设计 schema 验证。
+- `ef evidence compact`。
+- `ef run list/show` 运行历史。
+- `ef recipe complete` 用于外部 agent 回填 artifact。
 
-### 18.3 v0.3 新增
+### 18.3 v0.3.0 后延期
 
-- `ef dag` — Graphviz DOT 输出
-- 多 Profile 支持（切换目标板）
-- Recipe 组合（Recipe 组、Recipe 模板、共享步骤）
-- 证据导出/导入
-- 报告/摘要生成（`ef render`）
-- CAN 序列文件管理工具
-- RequirementLedger 集成（GitHub Issues、TODO.md 同步）
+- 真实 EXM-K target smoke。
+- CANSim recipe 类型和 CANSimService 集成。
+- Target automation recipe 类型和 ZMQ bridge。
+- 目标设备截图、日志自动化闭环。
+- 知识库提供者集成（`card_kb`）。
+- 证据导出/导入。
+- 报告/摘要生成（`ef render`）。
+- CAN 序列文件管理工具。
+- RequirementLedger 集成（GitHub Issues、TODO.md 同步）。
 
 ### 18.4 实现阶段
 
@@ -1775,8 +1811,8 @@ Phase 2：DAG 核心（2 周）
 Phase 3：执行（2 周）
   - ef satisfy 命令（完整流程）
   - Shell Recipe 执行器（本地 subprocess）
-  - v0.1 后延后：Shell Recipe 执行器（远程 SSH，复用 runner.py 模式）
-  - v0.1 后延后：SCP 文件拷贝（产物拉取）
+  - Shell Recipe 执行器（远程 SSH，复用 runner.py 模式）
+  - SCP 文件拷贝（产物拉取）
   - 多步骤 Recipe 支持（steps 数组）
   - Manual Recipe 执行器（阻塞 + 提示）
   - ef review 命令
@@ -1794,10 +1830,10 @@ Phase 5：EXM-K 集成（1 周）
   - 编写 exm-k profile.yaml + local.env.yaml
   - 编写 build.yaml Recipe
   - 编写 deploy.yaml Recipe
-  - 编写 test_design.yaml Recipe（v0.1 为手动占位）
+  - 编写 test_design.yaml Recipe（manual 或 agent_task 产物）
   - 编写 human_review.final.yaml Recipe
-  - v0.1 smoke：在模拟本地 build + deploy 上执行 ef satisfy dry-run
-  - v0.1 后延后：在真实 VM/板端执行 build + deploy 的端到端测试
+  - 模拟 smoke：在本地 build + deploy 上执行 ef satisfy dry-run
+  - v0.3.0 后：在真实 VM/板端执行 build + deploy 的端到端测试
   - 增量测试：修改源码 → ef status 显示过期 → ef satisfy 只重建
   - 迁移指南文档
 ```
@@ -1811,11 +1847,11 @@ Phase 5：EXM-K 集成（1 周）
 | DAG 模型对简单需求太复杂 | 只有 [build, deploy] 的需求是 2 个节点——比 8 阶段 CodexFlow 流水线简单。复杂度随需要扩展，不随仪式增加。 |
 | 大代码库源码哈希计算慢 | 哈希计算是惰性的（仅在 ef status/satisfy 时）。使用增量哈希 + 缓存。Glob 展开是瓶颈——用 mtime 检查缓存文件列表。 |
 | AI Agent 不理解拉取式上下文模型 | `ef what-next` 给出明确指令。`ef context --need` 给出精确所需。Agent 始终可以回退到 `ef satisfy` 全自动处理。 |
-| evidence.jsonl 无限增长 | 每个节点最新有效/失效循环之外的旧事件可以安全压缩。v0.2 添加 `ef evidence compact` 命令。 |
+| evidence.jsonl 无限增长 | 每个节点最新有效/失效循环之外的旧事件可以安全压缩。v0.3.0 已包含 `ef evidence compact` 命令。 |
 | 测试设计审批变成橡皮图章 | `manual` 审批要求显式理由。不带 `--rationale` 的 `ef review --accept` 被拒绝。审批事件是审计轨迹的一部分。 |
 | 远程 Recipe 执行（SSH）挂起或超时 | 所有 Recipe 有可配置超时。Shell 执行器使用 subprocess with timeout。SSH 命令使用 `-o ConnectTimeout=10`。健康检查有重试逻辑。 |
 | EXM-K 产品细节泄漏到核心 | 所有 EXM-K 特定值在 `.ef/profiles/exm-k/` 和 `.ef/requirements/` 中。核心引擎是项目无关的——执行 Recipe 时不需要理解 CAN 信号或 UI 页面。 |
-| 并发 ef satisfy 调用损坏 evidence.jsonl | 证据追加使用操作系统级文件锁（fcntl）。运行 ID 唯一（时间戳 + 随机）。v0.1 建议单操作者使用。 |
+| 并发 ef satisfy 调用损坏 evidence.jsonl | 证据追加使用操作系统级文件锁（fcntl）。运行 ID 唯一（时间戳 + 随机）。并行执行应限制在同一个 `ef satisfy --jobs N` 编排内。 |
 
 ---
 
@@ -1833,4 +1869,4 @@ Phase 5：EXM-K 集成（1 周）
 - **Recipe 优先的适配器模型**：简单场景用 YAML 定义，复杂场景用 Python 插件
 - **Python 实现**：AI 友好，与现有 codexflow.py 一致
 - **EXM-K 作为首个参考**：相同的目标、相同的 CAN 序列、相同的知识库
-- v0.1 用 `shell` + `manual` Recipe 类型验证 DAG 模型，v0.2 再添加 `cansim`、`target_automation` 和 `agent_task`
+- v0.3.0 已验证 shell、manual、agent_task、Python plugin、并行执行、证据压缩和 run history；真实 CANSim/target automation 放到后续真实案例阶段。

@@ -10,6 +10,12 @@ PYTHONPATH=src python3 -m embeddedflow.cli status REQ-1
 PYTHONPATH=src python3 -m embeddedflow.cli satisfy REQ-1 --dry-run
 ```
 
+## Release Position
+
+v0.3.0 is an Evidence-DAG workflow prototype release. It proves the CLI workflow core, evidence validity model, local/remote shell execution, external-agent handoff protocol, Python plugin extension point, parallel execution, evidence compaction, and run history.
+
+It is not a real target-device automation release: real EXM-K target smoke, CANSim, ZMQ bridge, and target automation remain deferred.
+
 v0.3 extends the core model:
 
 - Requirement YAML declares required evidence.

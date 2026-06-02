@@ -12,40 +12,42 @@ The real service users are embedded product software developers: the people resp
 
 ---
 
-## 2. v0.1 Scope
+## 2. v0.3 Release Scope
 
-v0.1 focuses on Linux-based embedded product software.
+v0.3.0 is an Evidence-DAG workflow prototype release for Linux-based embedded product software workflows.
 
-### v0.1 Truth Boundary
+### v0.3 Truth Boundary
 
-This section supersedes current design overclaims in the rest of this document: v0.1 is a local shell + manual Evidence-DAG MVP with a simulated EXM-K reference. SSH remote execution, SCP artifact transfer, real EXM-K board/VM smoke, CANSim, target automation, `agent_task`, `python` recipes, and `--jobs` are future-facing roadmap items, not v0.1 readiness criteria. Git status, commits, and tags are not product readiness criteria.
+This section supersedes older v0.1/v0.2 roadmap wording in the rest of this document when there is a conflict. v0.3.0 proves the workflow CLI core and evidence protocol; it is not a real target-device automation release.
 
-In scope:
+Supported in v0.3.0:
 
-- project-local workflow state with append-only event log
+- project-local workflow state with append-only evidence event logs
 - Evidence-DAG execution model with incremental re-execution
 - requirement intake with declarative evidence constraints
-- recipe system (shell and manual types for v0.1)
-- DAG construction, topological sort, and validity checking
-- evidence invalidation based on content hashing with transitive cascade
-- pull-based AI context API (`ef context`)
-- human review gates for test design and final acceptance
-- source hash computation for watched files
-- profile-based target configuration with template variable expansion
-- simulated EXM-K-style project integration as the first reference smoke
+- source and recipe hash validity with transitive stale detection
+- CLI commands including `ef status`, `ef dag`, `ef satisfy`, `ef review`, and `ef context`
+- local shell recipes and SSH remote shell recipes
+- SCP artifact transfer and multi-step shell recipes
+- manual review gates with required rationale
+- `agent_task` recipes that prepare instructions/context for external agents and accept completed artifacts through `ef recipe complete`
+- `python` plugin recipes loaded from `.ef/plugins/<plugin>.py`
+- parallel execution with `ef satisfy --jobs N`
+- `test_design_v1` schema validation
+- evidence compaction with `ef evidence compact`
+- run history with `ef run list` and `ef run show`
+- simulated EXM-K-style project integration as a local shell/manual reference smoke
 
-Out of scope for v0.1:
+Deferred after v0.3.0:
 
 - RTOS, MCU, bare-metal, HIL, JTAG, flashing, and power-cycle abstractions
-- `cansim` recipe type (built-in CANSimService HTTP executor)
-- `target_automation` recipe type (built-in ZMQ bridge)
-- `agent_task` recipe type (structured AI prompt/response protocol)
-- `python` recipe type (plugin-based recipes)
-- parallel execution (`--jobs N`)
+- real EXM-K target smoke with VM or board credentials
+- `cansim` recipe type and CANSimService lifecycle management
+- `target_automation` recipe type and ZMQ bridge
+- target-device screenshot/log automation closed loop
 - knowledge provider integration
 - global hosted workflow service
 - automatic knowledge-base generation and maintenance
-- CANSimService installation or daemon lifecycle management
 - default generation of large process documents
 
 ---
@@ -65,7 +67,7 @@ Out of scope for v0.1:
 - **Source Verification Required**: knowledge and prior conclusions never replace source inspection.
 - **Minimal Data Model**: three core concepts (Requirement, Recipe, Evidence) replace complex object hierarchies.
 - **Test Design as Hard Dependency**: verify nodes cannot execute until test design is produced AND reviewed.
-- **Linux Embedded First**: v0.1 serves Linux embedded product delivery well before expanding to other platforms.
+- **Linux Embedded First**: v0.3 keeps Linux embedded product delivery as the first product context before expanding to other platforms.
 
 ---
 
@@ -89,12 +91,12 @@ EmbeddedFlow CLI Core
         |      +--> Execution Planner (skip valid, execute stale/missing)
         |
         +--> Recipe Executor
-        |      +--> ShellExecutor (local subprocess; remote SSH deferred)
+        |      +--> ShellExecutor (local subprocess and SSH remote execution)
         |      +--> ManualExecutor (human gate, blocks until review)
-        |      +--> CansimExecutor (v0.2: HTTP client for CANSimService)
-        |      +--> TargetAutomationExecutor (v0.2: ZMQ bridge)
-        |      +--> AgentTaskExecutor (v0.2: structured AI prompt/response)
-        |      +--> PythonPluginExecutor (v0.2: importlib dynamic load)
+        |      +--> CansimExecutor (deferred: HTTP client for CANSimService)
+        |      +--> TargetAutomationExecutor (deferred: ZMQ bridge)
+        |      +--> AgentTaskExecutor (v0.3: external-agent handoff protocol)
+        |      +--> PythonPluginExecutor (v0.3: importlib dynamic load)
         |
         +--> Evidence Store (append-only JSONL event log)
         |
@@ -106,7 +108,7 @@ EmbeddedFlow CLI Core
         |
         +--> Source Hasher (SHA-256 of watched file contents)
         |
-        +--> KnowledgeProvider (v0.2: optional, card_kb / markdown_index / none)
+        +--> KnowledgeProvider (deferred: optional card_kb / markdown_index / none)
 ```
 
 The CLI core owns DAG construction, validity checking, execution planning, evidence recording, and context generation.
@@ -135,7 +137,7 @@ EmbeddedFlow has exactly three core concepts. Everything else is derived.
 
 A requirement declares **what evidence is needed** for a piece of work to be considered complete. It does not describe how to produce that evidence.
 
-The YAML below is a future target-device EXM-K shape, not the simulated v0.1 baseline. The v0.1 checked-in reference is `examples/exm-k`, with `test_design -> build -> deploy -> human_review.final` and no `remote: true`.
+The YAML below is a future target-device EXM-K shape. The checked-in `examples/exm-k` reference remains a simulated local shell/manual smoke, not a real board flow.
 
 ```yaml
 # .ef/requirements/REQ-EXM-FUEL-GAUGE-001.yaml
@@ -171,7 +173,7 @@ tags:
 
 A recipe declares **how to produce** a specific evidence node. It specifies dependencies on other evidence nodes, execution method, and what artifacts it produces.
 
-The remote build recipe below is roadmap design. In v0.1, use local shell recipes; `remote: true` is rejected.
+The remote build recipe below uses the v0.3.0 SSH shell shape. Real EXM-K VM credentials and board execution are still outside v0.3.0 automated readiness.
 
 ```yaml
 # .ef/recipes/build.yaml
@@ -233,7 +235,7 @@ When `ef satisfy <req-id>` is invoked:
 4. **Resolve transitive**: If recipe A depends on recipe B, and B depends on C, include C in the graph even if the requirement doesn't explicitly list it
 5. **Validate graph**: Check for cycles (error), missing recipes (error), orphan nodes (warning)
 
-Example: the v0.1 simulated `REQ-EXM-FUEL-GAUGE-001` reference produces this local/manual DAG:
+Example: the simulated `REQ-EXM-FUEL-GAUGE-001` reference produces this local/manual DAG:
 
 ```text
 ┌──────────────┐
@@ -258,7 +260,7 @@ Edges (dependencies):
 - deploy depends_on: [build]
 - human_review.final depends_on: [deploy]
 
-Future target-device DAGs may add `verify.can_stimulus`, `verify.screenshot`, `verify.comparison`, and `verify.log` after CANSim and target automation land in v0.2+.
+Future target-device DAGs may add `verify.can_stimulus`, `verify.screenshot`, `verify.comparison`, and `verify.log` once CANSim and target automation land after v0.3.0.
 
 ### 6.2 Topological Sort with Parallelism Detection
 
@@ -375,14 +377,14 @@ Forces the `build` node to re-execute even if valid. All nodes depending on `bui
 
 ### 7.1 Recipe Types
 
-| Type | Executor | v0.1 | Description |
-|------|----------|------|-------------|
-| `shell` | local subprocess | YES | Run local shell commands; `remote: true` is rejected in v0.1 |
-| `manual` | blocks, waits for `ef review` | YES | Human gate |
-| `cansim` | built-in HTTP client | v0.2 | CANSimService stimulus injection |
-| `target_automation` | built-in ZMQ client | v0.2 | Board-side UI automation |
-| `agent_task` | structured stdout protocol | v0.2 | AI agent generates evidence |
-| `python` | importlib dynamic load | v0.2 | Complex logic via Python plugins |
+| Type | Executor | v0.3 status | Description |
+|------|----------|-------------|-------------|
+| `shell` | local subprocess or SSH remote | Supported | Run local commands or `remote: true` commands through OpenSSH. |
+| `manual` | blocks, waits for `ef review` | Supported | Human gate with required rationale when accepting review nodes. |
+| `agent_task` | external-agent handoff | Supported | Prepares instructions/context; external agents report artifacts with `ef recipe complete`. |
+| `python` | importlib dynamic load | Supported | Complex logic via project-local Python plugins. |
+| `cansim` | built-in HTTP client | Deferred | CANSimService stimulus injection. |
+| `target_automation` | built-in ZMQ client | Deferred | Board-side UI automation. |
 
 ### 7.2 Shell Recipe — Local Execution
 
@@ -407,9 +409,9 @@ produces:
     capture: stdout+stderr
 ```
 
-### 7.3 Shell Recipe — Future Remote Execution (SSH, Deferred)
+### 7.3 Shell Recipe - Remote Execution (SSH)
 
-The following remote recipe shape is retained as roadmap design only. In v0.1, `remote: true` exits nonzero with `remote shell recipes are not implemented in this v0.1 slice` and must not record passing evidence.
+Remote shell execution is supported in v0.3.0. A recipe with `remote: true` runs through OpenSSH using the selected target from `.ef/profiles/<profile>/local.env.yaml`; `copy_to_local: true` artifacts are retrieved with `scp`.
 
 ```yaml
 id: build
@@ -454,9 +456,9 @@ on_failure:
   capture: [stdout, stderr, make_error_log]
 ```
 
-### 7.4 Shell Recipe — Future Multi-Step Deploy (SSH/SCP, Deferred)
+### 7.4 Shell Recipe - Multi-Step Deploy (SSH/SCP)
 
-This target-board deploy recipe is retained as roadmap design only. It requires SSH remote execution and SCP artifact transfer, both deferred from v0.1; the v0.1 simulated EXM-K reference uses local shell copy commands instead.
+Multi-step shell recipes and SCP steps are supported in v0.3.0. The example below shows the intended target-board shape, but `examples/exm-k` still uses a simulated local shell/manual smoke rather than a real board flow.
 
 ```yaml
 id: deploy
@@ -509,7 +511,7 @@ produces:
       startup_time_seconds: float
 ```
 
-### 7.5 CANSim Recipe (v0.2)
+### 7.5 CANSim Recipe (Deferred after v0.3)
 
 ```yaml
 id: verify.can_stimulus
@@ -567,7 +569,7 @@ produces:
     contains: all_request_response_pairs
 ```
 
-### 7.6 Target Automation Recipe (v0.2)
+### 7.6 Target Automation Recipe (Deferred after v0.3)
 
 ```yaml
 id: verify.screenshot
@@ -617,7 +619,7 @@ produces:
       errors: list
 ```
 
-### 7.7 Agent Task Recipe (v0.2)
+### 7.7 Agent Task Recipe (v0.3 Supported)
 
 ```yaml
 id: test_design
@@ -895,7 +897,7 @@ ef satisfy <req-id> [--dry-run] [--force <node>] [--continue-on-error]
     --force <node>: force re-execution of a specific node.
     --continue-on-error: do not stop on first failure.
 
-Deferred after v0.1: `--profile <id>` execution selection and `--jobs N` parallel execution.
+v0.3.0 supports `--jobs N` parallel execution for independent DAG nodes in the same level. Additional profile-selection UX remains future work.
 
 # Status and inspection
 ef status [<req-id>] [--all]
@@ -959,7 +961,7 @@ ef run show <run-id>
 
 ### 9.2 Example Session
 
-This v0.1 example uses the checked-in simulated EXM-K reference. It is local-only: no `--profile`, SSH, VM, real board, CANSim, target automation, or `agent_task` execution is required.
+This example uses the checked-in simulated EXM-K reference. It is local-only: no SSH, VM, real board, CANSim, target automation, or external agent execution is required.
 
 ```bash
 # Inspect the simulated requirement
@@ -1008,7 +1010,7 @@ $ ef status REQ-EXM-FUEL-GAUGE-001 --format json
 }
 ```
 
-Future real-target examples with VM builds, board deploy, CANSim, target automation, screenshots, and board logs belong to the v0.2+ roadmap sections. They are not v0.1 acceptance examples.
+Future real-target examples with VM builds, board deploy, CANSim, target automation, screenshots, and board logs remain deferred after v0.3.0. They are not v0.3.0 release acceptance examples.
 
 ---
 
@@ -1031,7 +1033,7 @@ The fundamental difference from CodexFlow's push-based packet system:
 $ ef context REQ-EXM-FUEL-GAUGE-001 --format json
 ```
 
-Returns current local project data. The v0.1 context output is JSON or Markdown, and the simulated EXM-K reference contains four local/manual nodes:
+Returns current local project data. The context output is JSON or Markdown, and the simulated EXM-K reference contains four local/manual nodes:
 
 ```json
 {
@@ -1066,7 +1068,7 @@ Returns current local project data. The v0.1 context output is JSON or Markdown,
 }
 ```
 
-No v0.1 context output includes SSH credentials, board hosts, CANSim endpoints, deployed board paths, or target automation channels.
+The simulated EXM-K context output does not include SSH credentials, board hosts, CANSim endpoints, deployed board paths, or target automation channels.
 
 ### 10.3 Scoped Context Query
 
@@ -1105,11 +1107,11 @@ Returns only the requested node plus its dependencies:
 }
 ```
 
-A future scoped context for `verify.can_stimulus` with `type: cansim`, CANSim host/port, board host, or deployed target paths is v0.2+ roadmap behavior, not v0.1 CLI output.
+A scoped context for `verify.can_stimulus` with `type: cansim`, CANSim host/port, board host, or deployed target paths remains deferred after v0.3.0.
 
 ### 10.4 Agent Evidence Reporting
 
-After producing evidence externally, agents can report a completed recipe with the implemented v0.1 command:
+After producing evidence externally, agents can report a completed recipe with the implemented v0.3.0 command:
 
 ```bash
 ef recipe complete test_design REQ-EXM-FUEL-GAUGE-001 \
@@ -1117,11 +1119,11 @@ ef recipe complete test_design REQ-EXM-FUEL-GAUGE-001 \
   --status pass
 ```
 
-There is no v0.1 `ef evidence record` command. Evidence is recorded by recipe execution, `ef recipe complete`, reviews, and invalidations.
+There is no separate `ef evidence record` command. Evidence is recorded by recipe execution, `ef recipe complete`, reviews, and invalidations.
 
 ### 10.5 Agent Workflow Pattern
 
-The v0.1 local/manual interaction pattern is:
+The v0.3.0 local/manual/agent-task interaction pattern is:
 
 ```text
 1. Agent receives task: "Satisfy REQ-EXM-FUEL-GAUGE-001"
@@ -1133,17 +1135,17 @@ The v0.1 local/manual interaction pattern is:
 7. Agent calls: ef status REQ-EXM-FUEL-GAUGE-001 --format json
 ```
 
-Future workflows where an agent task generates test design, CANSim injects stimuli, target automation captures screenshots, and board logs become evidence are v0.2+ roadmap behavior.
+Agent-task test design generation is supported in v0.3.0. Workflows that combine agent tasks with CANSim stimulus injection, target automation screenshots, and board logs remain deferred after v0.3.0.
 
 ---
 
 ## 11. Test Design Evidence Structure
 
-This schema is a future target-device test-design artifact shape. In v0.1, `test_design` is a manual review gate in the simulated EXM-K reference; automated `agent_task` production and CANSim-driven target verification are deferred.
+This schema is the supported v0.3.0 `test_design_v1` artifact shape. It can be produced by an `agent_task` recipe and validated when the external agent completes the recipe; CANSim-driven target verification remains deferred.
 
 ### 11.1 Schema: test_design_v1
 
-The test design is a structured YAML document that may be attached as manual evidence in v0.1 or generated by a future `agent_task` recipe. It defines how to verify the requirement when target-device integrations exist.
+The test design is a structured YAML document that may be attached as manual evidence or generated by an `agent_task` recipe. It defines how to verify the requirement when target-device integrations exist.
 
 ```yaml
 # Full test_design_v1 schema
@@ -1357,7 +1359,7 @@ This ensures:
 
 ## 12. Project Layout
 
-The project layout below is the future full target-device layout. It includes CANSim, target automation, Python plugins, run metadata, and real board artifacts that are deferred from v0.1. The v0.1 checked-in reference is the smaller `examples/exm-k` local/manual layout.
+The project layout below is the future full target-device layout. In v0.3.0, Python plugins and run metadata are supported, while CANSim, target automation, and real board artifacts remain deferred. The checked-in `examples/exm-k` reference is still a smaller simulated local/manual layout.
 
 ### 12.1 Directory Structure
 
@@ -1491,7 +1493,7 @@ vars:
 
 ### 12.4 Profile Configuration
 
-This production-board profile shape is deferred roadmap material. v0.1 does not resolve VM, board, CANSim, SSH, or SCP targets.
+This production-board profile shape is retained as real-target roadmap material. v0.3.0 supports SSH/SCP targets in principle, but real EXM-K VM or board credentials are not required for the release.
 
 ```yaml
 # .ef/profiles/exm-k/profile.yaml
@@ -1551,7 +1553,7 @@ targets:
 
 ### 12.5 Local Environment (gitignored)
 
-This real-target local environment file is deferred roadmap material for future SSH/board integrations, not required for v0.1.
+This real-target local environment file is where SSH/SCP target values would live. Real VM, board, and CANSim values are not required for v0.3.0 and must not be committed.
 
 ```yaml
 # .ef/profiles/exm-k/local.env.yaml
@@ -1585,7 +1587,7 @@ build_env:
 
 ```text
 Recipe: verify.can_stimulus (type: cansim)
-  → CansimExecutor (built-in, v0.2)
+  → CansimExecutor (deferred after v0.3)
     → HTTP client
       → CANSimService endpoint (WSL or remote)
         → CAN hardware interface
@@ -1651,7 +1653,7 @@ test_design.yaml → stimulus.sequences[*].source → cansim_sequences/*.json �
 
 ```text
 Recipe: verify.screenshot (type: target_automation)
-  → TargetAutomationExecutor (built-in, v0.2)
+  → TargetAutomationExecutor (deferred after v0.3)
     → SSH tunnel to board
       → ZMQ PUB/SUB sockets
         → Board-side ZMQBroker
@@ -1841,7 +1843,7 @@ During migration, both systems can coexist:
 
 ---
 
-## 18. v0.1 Deliverables
+## 18. v0.3.0 Release Deliverables
 
 ### 18.1 Minimum Viable Feature Set
 
@@ -1859,7 +1861,7 @@ During migration, both systems can coexist:
 | 10 | Invalidation cascade | Transitive stale marking |
 | 11 | Evidence store | JSONL append/read/query |
 | 12 | `ef satisfy` | Full DAG execution with shell + manual types |
-| 13 | Shell executor | Local subprocess command execution; SSH remote is deferred |
+| 13 | Shell executor | Local subprocess and SSH remote command execution |
 | 14 | Manual executor | Block + prompt + `ef review` |
 | 15 | `ef status` | Per-node validity display |
 | 16 | `ef what-next` | Next action suggestion |
@@ -1869,23 +1871,26 @@ During migration, both systems can coexist:
 | 20 | `ef review` | Human review recording |
 | 21 | EXM-K profile | Simulated local reference profile + build/deploy recipes |
 
-### 18.2 v0.2 Additions
+### 18.2 Implemented through v0.3.0
 
-- `cansim` recipe type (built-in CANSimService HTTP executor)
-- `target_automation` recipe type (built-in ZMQ bridge)
-- `agent_task` recipe type (structured agent protocol)
+- SSH remote shell recipes
+- SCP artifact retrieval and `type: scp` recipe steps
+- Multi-step shell recipes
+- `agent_task` recipe type (external-agent handoff protocol)
 - `python` recipe type (plugin-based recipes)
 - Parallel execution (`--jobs N`)
-- Knowledge provider integration (`card_kb`)
 - Test design schema validation
-- `ef run list/show` — run history
-- `ef recipe run` — direct single recipe execution
+- `ef evidence compact`
+- `ef run list/show` run history
+- `ef recipe complete` for completed external-agent artifacts
 
-### 18.3 v0.3 Additions
+### 18.3 Deferred after v0.3.0
 
-- `ef dag` — Graphviz DOT output
-- Multi-profile support (switching between board targets)
-- Recipe composition (recipe groups, recipe templates, shared steps)
+- Real EXM-K target smoke with VM or board credentials
+- CANSim recipe type and CANSimService integration
+- Target automation recipe type and ZMQ bridge
+- Target-device screenshot/log automation closed loop
+- Knowledge provider integration (`card_kb`)
 - Evidence export/import
 - Reporting / summary generation (`ef render`)
 - CAN sequence file management utilities
@@ -1917,8 +1922,8 @@ Phase 2: DAG Core (2 weeks)
 Phase 3: Execution (2 weeks)
   - ef satisfy command (full flow)
   - Shell recipe executor (local subprocess)
-  - Deferred after v0.1: shell recipe executor (remote via SSH, reuse runner.py patterns)
-  - Deferred after v0.1: SCP file copy (artifact retrieval)
+  - Shell recipe executor (remote via SSH, reuse runner.py patterns)
+  - SCP file copy (artifact retrieval)
   - Multi-step recipe support (steps array)
   - Manual recipe executor (block + prompt)
   - ef review command
@@ -1936,10 +1941,10 @@ Phase 5: EXM-K Integration (1 week)
   - Write exm-k profile.yaml + local.env.yaml
   - Write build.yaml recipe
   - Write deploy.yaml recipe
-  - Write test_design.yaml recipe (manual placeholder for v0.1)
+  - Write test_design.yaml recipe (manual or agent_task-produced artifact)
   - Write human_review.final.yaml recipe
-  - v0.1 smoke: ef satisfy dry-run with simulated local build + deploy
-  - Deferred after v0.1: end-to-end test with build + deploy on real VM/board
+  - Simulated smoke: ef satisfy dry-run with local build + deploy
+  - Deferred after v0.3.0: end-to-end test with build + deploy on real VM/board
   - Incremental test: modify source → ef status shows stale → ef satisfy re-builds
   - Migration guide document
 ```
@@ -1962,7 +1967,7 @@ Guardrail: `ef what-next` gives explicit instructions. `ef context --need` gives
 
 Risk: Evidence JSONL grows unbounded.
 
-Guardrail: Old events beyond the latest valid/invalid cycle per node are safe to compact. Add `ef evidence compact` command in v0.2.
+Guardrail: Old events beyond the latest valid/invalid cycle per node are safe to compact. v0.3.0 includes the `ef evidence compact` command.
 
 Risk: Test design evidence becomes a rubber-stamp gate.
 
@@ -1978,7 +1983,7 @@ Guardrail: All EXM-K-specific values live in `.ef/profiles/exm-k/` and `.ef/requ
 
 Risk: Concurrent ef satisfy invocations corrupt evidence.jsonl.
 
-Guardrail: Evidence append uses OS-level file locking (fcntl). Run IDs are unique (timestamp + random). v0.1 recommends single-operator usage.
+Guardrail: Evidence append uses OS-level file locking (fcntl). Run IDs are unique (timestamp + random). Parallel execution should stay within one orchestrated `ef satisfy --jobs N` invocation.
 
 ---
 
@@ -1996,4 +2001,4 @@ The approved direction is:
 - **Recipe-first adapter model**: YAML definitions for simple cases, Python plugins for complex
 - **Python implementation**: AI-friendly, consistent with existing codexflow.py
 - **EXM-K as first reference**: same targets, same CAN sequences, same knowledge base
-- Use v0.1 to validate the DAG model with `shell` + `manual` recipe types before adding `cansim`, `target_automation`, and `agent_task` in v0.2
+- v0.3.0 validates the workflow core with shell, manual, agent_task, Python plugin, parallel execution, evidence compaction, and run history before real CANSim/target automation integration.
